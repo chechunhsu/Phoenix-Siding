@@ -3,94 +3,50 @@ Phoenix.set({
   openAtLogin: true
 });
 
-const frameCaches = {};
+const getScreenFrame = window => window.screen().flippedVisibleFrame();
 
-const getFrameCache = window => frameCaches[window.hash()];
-const cacheFrame = window => {
-  frameCaches[window.hash()] = window.frame();
+const getDefaultFrame = window => {
+  const frame = getScreenFrame(window);
+  const margin = 100;
+  const height = frame.height - margin * 2;
+  const width = frame.width - margin * 2;
+  return {
+    x: (frame.width - width) / 2 + frame.x,
+    y: (frame.height - height) / 2 + frame.y,
+    height,
+    width,
+  };
 };
-const restoreFrame = window => {
-  const frameCache = frameCaches[window.hash()];
 
-  if (!frameCache) return;
+const createHandler = ({ test, set }) => () => {
+  const window = Window.focused();
+  const windowFrame = window.frame();
+  const screenFrame = getScreenFrame(window);
 
-  window.setFrame(frameCache);
-  delete frameCaches[window.hash()];
+  if (test && test(windowFrame, screenFrame)) {
+    window.setFrame(getDefaultFrame(window));
+  } else if (set) {
+    set(window, screenFrame);
+  }
 };
 
-const getScreenAndWindow = _ => ({
-  screen: Screen.main().flippedVisibleFrame(),
-  window: Window.focused()
-});
+Key.on('up', ['alt', 'cmd'], createHandler({
+  test: (wf, sf) => wf.width === sf.width && wf.height === sf.height,
+  set: w => w.maximise(),
+}));
 
-Key.on('up', [ 'alt', 'cmd' ], function () {
-  const { screen, window } = getScreenAndWindow();
-  const currentFrame = window.frame();
-  const previousFrame = getFrameCache(window);
+Key.on('down', ['alt', 'cmd'], createHandler({
+  set: w => w.setFrame(getDefaultFrame(w)),
+}));
 
-  const morphing = !previousFrame ||
-    currentFrame.width < screen.width ||
-    (currentFrame.height + 6) < screen.height; // FIXME: The setted height might be lower than the actual available height
+Key.on('left', ['alt', 'cmd'], createHandler({
+  test: (wf, sf) => wf.x === sf.x && wf.y === sf.y && wf.height === sf.height && wf.width === sf.width / 2,
+  set: (w, sf) => w.setFrame({ x: sf.x, y: sf.y, height: sf.height, width: sf.width / 2 }),
+}));
 
-  if (morphing) {
-    if (currentFrame.width !== screen.width / 2 && currentFrame.width !== screen.width) cacheFrame(window);
-    window.maximise()
-  } else {
-    restoreFrame(window);
-  }
-});
+Key.on('right', ['alt', 'cmd'], createHandler({
+  test: (wf, sf) => wf.x === (sf.x + sf.width / 2) && wf.y === sf.y && wf.height === sf.height && wf.width === sf.width / 2,
+  set: (w, sf) => w.setFrame({ x: sf.x + sf.width / 2, y: sf.y, height: sf.height, width: sf.width / 2 }),
+}));
 
-Key.on('left', [ 'alt', 'cmd' ], function () {
-  const { screen, window } = getScreenAndWindow();
-  const currentFrame = window.frame();
-  const previousFrame = getFrameCache(window);
-
-  const morphing = !previousFrame ||
-    currentFrame.x !== 0 ||
-    currentFrame.width !== screen.width / 2 ||
-    (currentFrame.height + 6) < screen.height; // FIXME: The setted height might be lower than the actual available height
-
-  if (morphing) {
-    if (currentFrame.width !== screen.width / 2 && currentFrame.width !== screen.width) cacheFrame(window);
-    window.setTopLeft({ x: 0, y: 0 });
-    window.setSize({ height: screen.height, width: screen.width / 2 });
-  } else {
-    restoreFrame(window);
-  }
-});
-
-Key.on('right', [ 'alt', 'cmd' ], function () {
-  const { screen, window } = getScreenAndWindow();
-  const currentFrame = window.frame();
-  const previousFrame = getFrameCache(window);
-
-  const morphing = !previousFrame ||
-    currentFrame.x !== screen.width / 2 ||
-    currentFrame.width !== screen.width / 2 ||
-    (currentFrame.height + 6) < screen.height; // FIXME: The setted height might be lower than the actual available height
-
-  if (morphing) {
-    if (currentFrame.width !== screen.width / 2 && currentFrame.width !== screen.width) cacheFrame(window);
-    window.setTopLeft({ x: screen.width / 2, y: 0 });
-    window.setSize({ height: screen.height, width: screen.width / 2 });
-  } else {
-    restoreFrame(window);
-  }
-});
-
-Key.on('down', [ 'alt', 'cmd' ], function () {
-  const { screen, window } = getScreenAndWindow();
-  const previousFrame = getFrameCache(window);
-
-  if (previousFrame) {
-    restoreFrame(window);
-  } else {
-    const menuBarHeight = 20;
-    const margin = 50;
-    window.setTopLeft({ x: margin, y: margin + menuBarHeight });
-    window.setSize({ height: screen.height - menuBarHeight - margin * 2, width: screen.width - margin * 2 });
-    cacheFrame(window);
-  }
-});
-
-Phoenix.notify("Configuration reloaded successfully");
+Phoenix.notify('Configuration reloaded successfully');
